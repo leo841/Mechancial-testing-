@@ -1,67 +1,57 @@
-%% Displacement Interpolation (Camera Data)
-% Replaces the previous 3-segment curve-fitting approach.
-% Input:  displacement measured by camera at 0.5 s intervals
-% Output: displacement resampled at 0.1 s intervals via interpolation
+function [t_fine, d_fine] = displacement_interpolation(t_raw, d_raw, t_fine_step, method)
+% DISPLACEMENT_INTERPOLATION  Resample camera displacement data via interpolation.
 %
-% Interpolation methods available (set 'method' below):
-%   'linear'   - piecewise linear (fastest, no overshoot)
-%   'spline'   - cubic spline    (smooth, may overshoot at ends)
-%   'pchip'    - shape-preserving cubic (smooth, no overshoot) [DEFAULT]
-%   'makima'   - modified Akima  (smooth, robust to outliers)
+%   [t_fine, d_fine] = displacement_interpolation(t_raw, d_raw)
+%   [t_fine, d_fine] = displacement_interpolation(t_raw, d_raw, t_fine_step)
+%   [t_fine, d_fine] = displacement_interpolation(t_raw, d_raw, t_fine_step, method)
+%
+%   Inputs:
+%     t_raw       - time vector of camera measurements (s), e.g. every 0.5 s
+%     d_raw       - displacement vector at those times (same length as t_raw)
+%     t_fine_step - desired output time step (s)          [default: 0.1]
+%     method      - interpolation method string           [default: 'pchip']
+%                   'pchip'   shape-preserving cubic, no overshoot (recommended)
+%                   'spline'  cubic spline, smoothest but may overshoot
+%                   'linear'  piecewise linear, no assumptions
+%                   'makima'  modified Akima, robust to outliers
+%
+%   Outputs:
+%     t_fine - resampled time vector at t_fine_step intervals
+%     d_fine - interpolated displacement at each t_fine point
+%
+%   Example (from main_function):
+%     [t_out, d_out] = displacement_interpolation(t_camera, d_camera);
+%     [t_out, d_out] = displacement_interpolation(t_camera, d_camera, 0.1, 'spline');
 
-clear; clc; close all;
+    %% defaults
+    if nargin < 3 || isempty(t_fine_step), t_fine_step = 0.1;    end
+    if nargin < 4 || isempty(method),      method      = 'pchip'; end
 
-%% ── 1. INPUT DATA ────────────────────────────────────────────────────────
-% Replace the values below with your actual camera measurements.
-% t_raw : time vector in seconds, sampled every 0.5 s
-% d_raw : corresponding displacement values (same units as your camera data)
+    %% interpolate
+    t_fine = t_raw(1) : t_fine_step : t_raw(end);
+    d_fine = interp1(t_raw, d_raw, t_fine, method);
 
-t_raw = 0 : 0.5 : 10;                   % example: 0 to 10 s, step 0.5 s
-d_raw = sin(t_raw) + 0.05*randn(size(t_raw));  % ← replace with real data
+    %% console summary
+    fprintf('Interpolation method : %s\n', method);
+    fprintf('Original points      : %d  (step %.2f s)\n', numel(t_raw),  mean(diff(t_raw)));
+    fprintf('Interpolated points  : %d  (step %.2f s)\n', numel(t_fine), t_fine_step);
 
-%% ── 2. INTERPOLATION SETTINGS ───────────────────────────────────────────
-method     = 'pchip';   % choose: 'linear' | 'pchip' | 'spline' | 'makima'
-t_fine_step = 0.1;       % desired output time step (seconds)
+    %% plot
+    figure('Name', 'Displacement Interpolation', 'NumberTitle', 'off');
+    plot(t_raw,  d_raw,  'ko', 'MarkerSize', 7, 'LineWidth', 1.5, ...
+         'DisplayName', 'Camera data');
+    hold on;
+    plot(t_fine, d_fine, 'b-', 'LineWidth', 2, ...
+         'DisplayName', sprintf('Interpolated (%s)', method));
+    plot(t_fine, d_fine, 'b.', 'MarkerSize', 6, 'HandleVisibility', 'off');
+    xlabel('Time (s)');  ylabel('Displacement');
+    title(sprintf('Camera Displacement — %s interpolation', method));
+    legend('Location', 'best');
+    grid on;  hold off;
 
-%% ── 3. INTERPOLATE ──────────────────────────────────────────────────────
-t_fine = t_raw(1) : t_fine_step : t_raw(end);   % new time axis at 0.1 s
-d_fine = interp1(t_raw, d_raw, t_fine, method);  % interpolated displacement
-
-%% ── 4. DISPLAY RESULTS ──────────────────────────────────────────────────
-fprintf('Interpolation method : %s\n', method);
-fprintf('Original points      : %d  (every %.1f s)\n', numel(t_raw),  t_raw(2)-t_raw(1));
-fprintf('Interpolated points  : %d  (every %.1f s)\n', numel(t_fine), t_fine_step);
-fprintf('\n%-10s  %-15s\n', 'Time (s)', 'Displacement');
-fprintf('%-10s  %-15s\n', '--------', '------------');
-for k = 1:numel(t_fine)
-    fprintf('%-10.1f  %-15.6f\n', t_fine(k), d_fine(k));
+    %% save CSV
+    output_file = 'displacement_interpolated.csv';
+    writetable(table(t_fine(:), d_fine(:), 'VariableNames', {'Time_s','Displacement'}), ...
+               output_file);
+    fprintf('Results saved to    : %s\n', output_file);
 end
-
-%% ── 5. PLOT ─────────────────────────────────────────────────────────────
-figure('Name', 'Displacement Interpolation', 'NumberTitle', 'off');
-
-% --- raw camera data ---
-plot(t_raw, d_raw, 'ko', 'MarkerSize', 7, 'LineWidth', 1.5, ...
-     'DisplayName', 'Camera data (0.5 s)');
-hold on;
-
-% --- interpolated curve ---
-plot(t_fine, d_fine, 'b-', 'LineWidth', 2, ...
-     'DisplayName', sprintf('Interpolated (%s, 0.1 s)', method));
-
-% --- mark interpolated points ---
-plot(t_fine, d_fine, 'b.', 'MarkerSize', 6, 'HandleVisibility', 'off');
-
-xlabel('Time (s)');
-ylabel('Displacement');
-title(sprintf('Camera Displacement — %s interpolation', method));
-legend('Location', 'best');
-grid on;
-hold off;
-
-%% ── 6. SAVE RESULTS TO CSV ──────────────────────────────────────────────
-output_file = 'displacement_interpolated.csv';
-T = table(t_fine(:), d_fine(:), ...
-    'VariableNames', {'Time_s', 'Displacement'});
-writetable(T, output_file);
-fprintf('\nResults saved to: %s\n', output_file);
