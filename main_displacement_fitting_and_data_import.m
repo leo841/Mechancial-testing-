@@ -111,60 +111,37 @@ writematrix('Optical displacement', dataexcelfilename, 'Sheet', 2, 'Range', 'E1'
 writematrix(optical_displacement, dataexcelfilename, 'Sheet', 2, 'Range', 'E2' );
 
 %%
-%%% data fitting for corrected displacement
-%%%now what we need to do is that the optical displacement is not linear with time, it usually have 3 segements: 
-%%% (1) Initial Compliance (2) Linear segement (3) change in stiffness(
-%%% linearity ) of after fracture
+%%% Displacement correction via direct interpolation
+%%% Replaces the previous 3-segment curve-fitting approach.
+%%% optical_displacement (0.5 s camera data) is interpolated directly at
+%%% tester_time stamps using pchip (shape-preserving, no overshoot).
 
-
-figure (1);
-plot(optical_time, optical_displacement); grid on;
-xlabel('Time (s)'); ylabel('Optical Displacement');
-title('Select two breakpoints (t1, t2)');
-hold on
-plot(tester_time, tester_displacement);
-saveas(gcf, fullfile(rootfolder,'Displacement compare.png'));
-
-% Show plot
-% Plot data
-figure(2);
-plot(optical_time, optical_displacement, 'b'); grid on;
-xlabel('Time (s)'); ylabel('Optical Displacement');
-title('Zoom into FIRST breakpoint region, then press any key...');
-zoom on;
-
-% Wait for zoom, then get first point
-pause;
-zoom off;
-title('Click FIRST breakpoint');
-[t1, ~] = ginput(1);
-
-% Allow second zoom
-title('Zoom into SECOND breakpoint region, then press any key...');
-zoom on;
-pause;
-zoom off;
-title('Click SECOND breakpoint');
-[t2, ~] = ginput(1);
-
-% Sort breakpoints just in case
-t_breaks = sort([t1, t2]);
-
-% Proceed to fit using your previous function
-[fitParams, yfit, gof] = fitThreeSegmentOptical(optical_time, optical_displacement, t_breaks, ...
-    'ModelType', {'linear', 'power', 'exponential'}, ...
-    'HorizontalSegments', [1],...
-    'ContinuityType', 'C0');
-
-% Plot result
+% Plot optical vs tester displacement for visual check
+figure(1);
+plot(optical_time, optical_displacement, 'b', 'DisplayName', 'Optical'); grid on;
 hold on;
-plot(optical_time, yfit, 'r--', 'LineWidth', 2);
-legend('Original Data', 'Fitted Line');
-title(sprintf('3-Segment Fit | R^2 = %.4f', gof.R2));
-saveas(gcf, fullfile(rootfolder,'displacement fitting.png'));
+plot(tester_time, tester_displacement, 'r', 'DisplayName', 'Tester');
+xlabel('Time (s)'); ylabel('Displacement');
+title('Optical vs Tester Displacement');
+legend('Location', 'best');
+saveas(gcf, fullfile(rootfolder, 'Displacement compare.png'));
 
-%write to excel file
-corrected_displacement = interp1(optical_time, yfit, tester_time, 'linear', 'extrap');
+% Interpolate optical data at tester time stamps
+[~, corrected_displacement] = displacement_interpolation( ...
+    optical_time, optical_displacement, tester_time, 'pchip');
+
+% Plot interpolation result
+figure(2);
+plot(optical_time, optical_displacement, 'ko', 'MarkerSize', 5, ...
+    'DisplayName', 'Camera data (0.5 s)');
+hold on;
+plot(tester_time, corrected_displacement, 'b-', 'LineWidth', 2, ...
+    'DisplayName', 'Interpolated (pchip)');
+xlabel('Time (s)'); ylabel('Displacement');
+title('Displacement Interpolation (pchip)');
+legend('Location', 'best');
+grid on;
+saveas(gcf, fullfile(rootfolder, 'displacement interpolation.png'));
 
 %write to excel file
 writematrix('Corrected displacement', dataexcelfilename, 'Sheet', 2, 'Range', 'F1' )
